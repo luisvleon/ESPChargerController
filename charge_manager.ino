@@ -26,6 +26,9 @@ float vadjust = 0.00;
 int haltTemp = 50;
 int safeTemp = 30;
 int tempLoops = 0;
+int restartLoops = 0;
+
+bool offline = false;
 
 //How many loops until refresh params
 int refresh_loops = 0;
@@ -48,23 +51,31 @@ void setup()
   Serial.begin(9600);
   pinMode(RELAY_PIN, OUTPUT);
   dht_sensor.begin(); 
+  int conAttemps;
 
   WiFi.begin(ssid, password);
-  while(WiFi.status() != WL_CONNECTED)
+  while(WiFi.status() != WL_CONNECTED && offline)
   {
-    Serial.print("."); 
-    delay(500);  
+    for(; conAttemps < 5; conAttemps++)
+    {
+      Serial.print("."); 
+      delay(500); 
+      offline = true;
+    }     
   }
-  WiFi.mode(WIFI_STA);
-  Serial.print(" Local IP: ");
-  Serial.println(WiFi.localIP());
+  if(!offline)
+  {
+     WiFi.mode(WIFI_STA);
+     Serial.print(" Local IP: ");
+     Serial.println(WiFi.localIP());
   
-  server.on("/", handleRoot);
-  server.begin(); webSocket.begin();
-  delay(1000);
+     server.on("/", handleRoot);
+     server.begin(); webSocket.begin();
+     delay(1000);
 
-  // Init and get the time
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+     // Init and get the time
+     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); 
+  }
 }
 //====================================================================
 void loop() 
@@ -76,24 +87,37 @@ void loop()
     if (actual_loop == refresh_loops)
     {
       actual_loop = 0; //reset to 0 
-      refreshParams();  
+      if(!offline)
+      {
+        refreshParams();  
+      }
     }
     else
     {
       actual_loop++;
     }        
-     float avgvolt = handlecharge();
-     webSocket.loop(); server.handleClient();
+     float avgvolt = handlecharge();     
      String POTvalString = String(avgvolt);    
      float tempC = dht_sensor.readTemperature();
-        
+     
+     webSocket.loop(); server.handleClient();
      JSONtxt = "{\"POT\":\"" + POTvalString + "\", \"TEMPC\":\"" + tempC + "\"}";
      webSocket.broadcastTXT(JSONtxt);  
   }
     else
   {
-      digitalWrite(RELAY_PIN, LOW);
-      Serial.println("Charge standby!");
+      if(!offline)
+      {
+        digitalWrite(RELAY_PIN, HIGH);
+        Serial.println("System offline, charging!");
+        restartLoops++;
+        if (restartLoops > 10) ESP.restart();
+      }
+      else
+      {
+        digitalWrite(RELAY_PIN, LOW);
+        Serial.println("Charge standby!");
+      }      
   }
 }
 
@@ -200,7 +224,7 @@ void refreshParams()
 bool checkTime(){
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
+    Serial.println("Failed to obtain time");    
     return false;
   }
   char timeHour[3];
