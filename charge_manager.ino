@@ -23,9 +23,12 @@ float vcut = 12.80;
 float vstart = 10.50;
 float vref = 4.74;
 float vadjust = 0.00;
+int haltTemp = 50;
+int safeTemp = 30;
+int tempLoops = 0;
 
 //How many loops until refresh params
-int refresh_loops = 10;
+int refresh_loops = 0;
 int actual_loop = refresh_loops; //first set at refresh_loop value to inmediate refresh
 
 //-----------------------------------------------
@@ -73,7 +76,7 @@ void loop()
     if (actual_loop == refresh_loops)
     {
       actual_loop = 0; //reset to 0 
-      refresh_params();  
+      refreshParams();  
     }
     else
     {
@@ -96,7 +99,7 @@ void loop()
 
 bool chargeGo()
 {
-   if(checktime())
+   if(checkTime() && checkTemp())
    {
     return true;    
    }
@@ -133,14 +136,14 @@ float handlecharge()
 }
 
 
-void refresh_params()
+void refreshParams()
 {      
     HTTPClient http;    
     http.begin("http://websoftec.net/param.json");
     http.GET();
     
     // Parse response
-    StaticJsonDocument<200> doc;    
+    StaticJsonDocument<300> doc;    
     //deserializeJson(doc, http.getStream());
     DeserializationError error = deserializeJson(doc, http.getString());
     
@@ -158,6 +161,8 @@ void refresh_params()
       String vref_s = doc["REF"];
       String vadjust_s = doc["ADJUST"];
       refresh_loops = doc["LOOPS"];
+      haltTemp = doc["HALTTEMP"];
+      safeTemp = doc["SAFETEMP"];
       
       vcut = vcut_s.toFloat();
       vstart = vstart_s.toFloat();
@@ -177,16 +182,22 @@ void refresh_params()
       Serial.print(vref);
       
       Serial.print(" | # Loops: ");
-      Serial.print(refresh_loops);
+      Serial.println(refresh_loops);
 
-      Serial.print(" | Adj. volts: ");
-      Serial.println(vadjust);
+      Serial.print("Adj. volts: ");
+      Serial.print(vadjust);
+
+      Serial.print(" | Halt Temp: ");
+      Serial.print(haltTemp);
+
+      Serial.print(" | Safe Temp: ");
+      Serial.println(safeTemp);
       // Disconnect
       http.end();
     }
 }
 
-bool checktime(){
+bool checkTime(){
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
     Serial.println("Failed to obtain time");
@@ -208,4 +219,30 @@ bool checktime(){
    {
     return true;
    }
+}
+
+bool checkTemp()
+{
+  if(tempLoops > 0)
+  {
+    tempLoops--;
+    Serial.println("Cooling battery down");
+    return false;
+  }
+  else
+  {
+    float tempNow = dht_sensor.readTemperature();
+    Serial.print("Temp now: ");
+    Serial.println(tempNow);
+    if (tempNow > haltTemp)
+    {
+      Serial.println("Unsafe temp reached"); 
+      tempLoops = 5;
+      return false;         
+    }
+    else if(tempNow < safeTemp)
+    {
+      return true;
+    }  
+  }   
 }
