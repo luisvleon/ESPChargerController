@@ -25,7 +25,7 @@ R"=====(
 </style>
 <!--------------------------HTML-------------------------->
 <body>
-    <h1><div class="h1">Solar panel voltage</div></h1>
+    <h1><div class="h1">Solar panel charger controller</div></h1>
     <h2>
         Voltage: <span style="color:rgb(216, 3, 3)" id="POTvalue">0</span> V  <br>
         Temperature: <span style="color:rgb(216, 3, 3)" id="TEMPvalue">0</span> V
